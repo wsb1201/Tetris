@@ -4,25 +4,28 @@ using Avalonia.Media;
 
 namespace Tetris;
 
-public class TetrisGame
+public class TetrisGame(int level)
 {
 	internal readonly Stopwatch _clock = new();
 
 	public int Score { get; private set; }
-	public int Level { get; private set; } = 1;
+	public int Level { get; private set; } = int.Clamp(level, 1, 20);
 
 	public const int Columns = 10;
 	public const int Rows = 20;
 	private readonly TetrominoType[,] _playfield = new TetrominoType[Rows, Columns];
 
 	private Tetromino? _currentPiece;
+	private int _clearedLines;
 
 	private readonly IEnumerator<TetrominoType> _sequence = SequenceGenerator(Random.Shared)
 		.GetEnumerator();
 
+	public bool IsGameOver { get; private set; }
 	public event EventHandler<int>? GameOver;
 
 	public event EventHandler<int>? ScoreUpdated;
+	public event EventHandler<int>? LevelUpdated;
 
 	private void IncrementScore(int additional)
 	{
@@ -30,6 +33,29 @@ public class TetrisGame
 		{
 			Score += additional;
 			ScoreUpdated?.Invoke(this, Score);
+		}
+	}
+
+	private bool _paused;
+	public bool IsPaused
+	{
+		get => _paused;
+		set
+		{
+			if (!IsGameOver)
+			{
+				if (value && !_paused)
+				{
+					_clock.Stop();
+					_currentPiece?.PlacementLock?.Clock.Stop();
+				}
+				else if (!value && _paused)
+				{
+					_clock.Start();
+					_currentPiece?.PlacementLock?.Clock.Start();
+				}
+			}
+			_paused = value;
 		}
 	}
 
@@ -46,13 +72,13 @@ public class TetrisGame
 		for (int row = 0; row < Rows; row++)
 		for (int col = 0; col < Columns; col++)
 		{
-			if (_playfield[row, col] is not 0 and TetrominoType i)
+			if (_playfield[row, col] is not 0 and TetrominoType i && !_paused)
 				DrawCell(col, row, Tetromino.GetColor(i));
 			else
 				DrawCellExplicit(col, row, Brushes.Black, Brushes.White);
 		}
 
-		if (_currentPiece != null)
+		if (_currentPiece != null && !_paused)
 		{
 			var ghostY = 0;
 			while (!Collides(_currentPiece, 0, ++ghostY)) { }
@@ -224,7 +250,9 @@ public class TetrisGame
 				_currentPiece.PlacementLock = null;
 				_clock.Restart();
 			}
-			if (_clock.Elapsed >= TimeSpan.FromMilliseconds(500))
+			var t = (Level - 1) / 19.0;
+			var stepDelay = 500.0 * (1.0 - t) + 16.0 * t;
+			if (_clock.Elapsed >= TimeSpan.FromMilliseconds(stepDelay))
 			{
 				_clock.Restart();
 				_currentPiece.Y++;
@@ -256,6 +284,7 @@ public class TetrisGame
 
 		_currentPiece = null;
 		_clock.Reset();
+		IsGameOver = true;
 		GameOver?.Invoke(this, Score);
 		return false;
 	}
@@ -311,6 +340,17 @@ public class TetrisGame
 			case 4: // Tetris
 				IncrementScore(800 * Level);
 				break;
+		}
+
+		_clearedLines += rowsCleared;
+		while (_clearedLines >= 10)
+		{
+			_clearedLines -= 10;
+			if (level < 20)
+			{
+				Level += 1;
+				LevelUpdated?.Invoke(this, Level);
+			}
 		}
 	}
 

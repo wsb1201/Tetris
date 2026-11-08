@@ -8,7 +8,7 @@ using Avalonia.Threading;
 
 namespace Tetris;
 
-public sealed class GameView : StackPanel
+public sealed class GameView : Canvas
 {
 	private readonly DispatcherTimer _timer;
 	private readonly TetrisGame _game;
@@ -21,26 +21,103 @@ public sealed class GameView : StackPanel
 		Padding = new Thickness(4),
 		HorizontalAlignment = HorizontalAlignment.Left,
 	};
+	private readonly TextBlock _levelLabel = new()
+	{
+		Text = "Level: 1",
+		FontSize = 14,
+		Foreground = Brushes.White,
+		Padding = new Thickness(4),
+		HorizontalAlignment = HorizontalAlignment.Left,
+	};
+	private readonly StackPanel _pauseMenu;
+
+	public event EventHandler<int>? ExitGame;
 
 	public GameView(TetrisGame game)
 	{
 		Focusable = true;
-		Orientation = Orientation.Vertical;
+		MinWidth = 320;
+		MinHeight = 640;
 
 		_drawing = new DrawingSurface(game)
 		{
+			MinWidth = MinWidth,
+			MinHeight = MinHeight,
 			HorizontalAlignment = HorizontalAlignment.Center,
 			VerticalAlignment = VerticalAlignment.Center,
-			MinWidth = 320,
-			MinHeight = 640,
 		};
 
-		Children.Add(_scoreLabel);
-		Children.Add(_drawing);
+		var resumeButton = new Button()
+		{
+			Content = "Resume",
+			FontSize = 18,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			HorizontalContentAlignment = HorizontalAlignment.Center,
+			Width = 160,
+		};
+
+		var exitButton = new Button()
+		{
+			Content = "End Game",
+			FontSize = 18,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			HorizontalContentAlignment = HorizontalAlignment.Center,
+			Width = 160,
+		};
+
+		Children.AddRange([
+			new StackPanel
+			{
+				MinWidth = MinWidth,
+				MinHeight = MinHeight,
+				Orientation = Orientation.Vertical,
+				Children =
+				{
+					new StackPanel
+					{
+						HorizontalAlignment = HorizontalAlignment.Stretch,
+						Orientation = Orientation.Horizontal,
+						Children = { _scoreLabel, _levelLabel },
+					},
+					_drawing,
+				},
+			},
+			_pauseMenu = new StackPanel
+			{
+				HorizontalAlignment = HorizontalAlignment.Center,
+				VerticalAlignment = VerticalAlignment.Center,
+				Orientation = Orientation.Vertical,
+				IsVisible = false,
+				ZIndex = 1,
+				Background = Brushes.Navy,
+				Margin = new Thickness(80, 280),
+				Children =
+				{
+					new TextBlock
+					{
+						Text = "Paused",
+						FontSize = 32,
+						HorizontalAlignment = HorizontalAlignment.Center,
+						VerticalAlignment = VerticalAlignment.Center,
+					},
+					resumeButton,
+					exitButton,
+				},
+			},
+		]);
+
+		resumeButton.Click += (_, __) => TogglePauseMenu();
+		exitButton.Click += (_, __) => ExitGame?.Invoke(this, game.Score);
 
 		_game = game;
 		_game.ScoreUpdated += (_, score) => _scoreLabel.Text = $"Score: {score}";
-		_game.GameOver += (_, score) => _scoreLabel.Text = $"Game Over! Final score: {score}";
+		_game.LevelUpdated += (_, level) => _levelLabel.Text = $"Level: {level}";
+		_levelLabel.Text = $"Level: {_game.Level}";
+
+		_game.GameOver += (_, score) =>
+		{
+			_scoreLabel.Text = $"Game Over! Final score: {score}";
+		};
 
 		_timer = new() { Interval = TimeSpan.FromMilliseconds(16) };
 		_timer.Tick += delegate
@@ -49,6 +126,23 @@ public sealed class GameView : StackPanel
 			if (!_game.Step())
 				_timer.Stop();
 		};
+	}
+
+	private void TogglePauseMenu()
+	{
+		if (_game.IsGameOver)
+			return;
+		if (_pauseMenu.IsVisible = _game.IsPaused = !_game.IsPaused)
+		{
+			_drawing.InvalidateVisual();
+			_timer.Stop();
+		}
+		else
+		{
+			_drawing.InvalidateVisual();
+			_timer.Start();
+			Focus();
+		}
 	}
 
 	protected override void OnLoaded(RoutedEventArgs e)
@@ -85,20 +179,6 @@ public sealed class GameView : StackPanel
 		}
 	}
 
-	private bool _shiftKeyDown;
-
-	protected override void OnKeyUp(KeyEventArgs e)
-	{
-		base.OnKeyUp(e);
-		switch (e.Key)
-		{
-			case Key.LeftShift:
-				_shiftKeyDown = false;
-				e.Handled = true;
-				return;
-		}
-	}
-
 	protected override void OnKeyDown(KeyEventArgs e)
 	{
 		base.OnKeyDown(e);
@@ -110,16 +190,21 @@ public sealed class GameView : StackPanel
 				e.Handled = false;
 				return;
 
-			case Key.LeftShift:
-				_shiftKeyDown = true;
-				return;
-
 			case Key.Escape:
-				// TODO: Pause
+				if (_game.IsGameOver)
+					ExitGame?.Invoke(this, _game.Score);
+				else
+					TogglePauseMenu();
 				return;
 
 			case Key.Up:
-				if (_game.Rotate(_shiftKeyDown))
+				if (_game.Rotate())
+					_drawing.InvalidateVisual();
+				return;
+
+			case Key.LeftCtrl:
+			case Key.Z:
+				if (_game.Rotate(reverse: true))
 					_drawing.InvalidateVisual();
 				return;
 

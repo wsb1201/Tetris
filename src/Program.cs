@@ -1,6 +1,5 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Layout;
 using Avalonia.Themes.Fluent;
 
 namespace Tetris;
@@ -24,83 +23,7 @@ internal static class Program
 
 	static void AppMain(Application app, string[] args)
 	{
-		var tetrisLabel = new TextBlock
-		{
-			Text = "Tetris",
-			FontSize = 48,
-			HorizontalAlignment = HorizontalAlignment.Center,
-		};
-		var startButton = new Button
-		{
-			Content = "Start Game",
-			FontSize = 18,
-			HorizontalAlignment = HorizontalAlignment.Center,
-			HorizontalContentAlignment = HorizontalAlignment.Center,
-			Width = 160,
-		};
-
-		int count = 0;
-		var countLabel = new TextBlock
-		{
-			Text = "0",
-			FontSize = 48,
-			HorizontalAlignment = HorizontalAlignment.Center,
-		};
-
-		var incrementButton = new Button
-		{
-			Content = "Increment",
-			FontSize = 18,
-			HorizontalAlignment = HorizontalAlignment.Center,
-			HorizontalContentAlignment = HorizontalAlignment.Center,
-			Width = 160,
-		};
-		incrementButton.Click += delegate
-		{
-			count++;
-			countLabel.Text = count.ToString();
-		};
-
-		var decrementButton = new Button
-		{
-			Content = "Decrement",
-			FontSize = 18,
-			HorizontalAlignment = HorizontalAlignment.Center,
-			HorizontalContentAlignment = HorizontalAlignment.Center,
-			Width = 160,
-		};
-		decrementButton.Click += delegate
-		{
-			count--;
-			countLabel.Text = count.ToString();
-		};
-
-		var resetButton = new Button
-		{
-			Content = "Reset",
-			FontSize = 14,
-			HorizontalAlignment = HorizontalAlignment.Center,
-		};
-		resetButton.Click += delegate
-		{
-			count = 0;
-			countLabel.Text = "0";
-		};
-
-		var buttonRow = new StackPanel
-		{
-			Orientation = Orientation.Horizontal,
-			HorizontalAlignment = HorizontalAlignment.Center,
-			Spacing = 12,
-			Children = { incrementButton, decrementButton },
-		};
-
-		var mainMenu = new StackPanel
-		{
-			VerticalAlignment = VerticalAlignment.Center,
-			Spacing = 20,
-			Children = { tetrisLabel, startButton, countLabel, buttonRow, resetButton },
-		};
+		var mainMenu = new MainMenu();
 
 		var window = new Window
 		{
@@ -114,9 +37,14 @@ internal static class Program
 
 		GameView? gameView = null;
 
-		startButton.Click += delegate
+		mainMenu.StartGame += (_, level) =>
 		{
-			window.Content = gameView ??= new(new TetrisGame());
+			window.Content = gameView ??= new(new TetrisGame(level));
+			gameView.ExitGame += (_, __) =>
+			{
+				window.Content = mainMenu;
+				gameView = null;
+			};
 		};
 
 		app.Run(window);
